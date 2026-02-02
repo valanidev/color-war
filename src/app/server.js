@@ -1,14 +1,17 @@
 import { createServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
 import { createClient } from 'redis'
+import 'dotenv/config'
 
 const GRID_SIZE = 128
 const REDIS_KEY = 'color_war_grid'
 
-// Redis
-const redis = createClient({
-  url: 'redis://:kTqgcWNuixmclaWw0qXXghLDqChQqw6z@redis-11706.c339.eu-west-3-1.ec2.cloud.redislabs.com:11706',
-})
+const redisUrl = process.env.REDIS_URL
+if (!redisUrl) {
+  console.error('REDIS_URL missing — add it to .env or your environment')
+  process.exit(1)
+}
+const redis = createClient({ url: redisUrl })
 redis.connect().then(() => console.log('Redis connected ✅'))
 
 const getGrid = async () => {
@@ -36,7 +39,6 @@ const updateGrid = async (x, y, color) => {
   return grid
 }
 
-// Serveur HTTP
 const httpServer = createServer()
 const io = new SocketIOServer(httpServer, {
   cors: { origin: '*' },
@@ -48,10 +50,11 @@ io.on('connection', async (socket) => {
   // RESET GRIS (DEV ONLY)
   // await resetGrid(GRID_SIZE)
 
+  const currentCount = parseInt(await redis.get('placement_count')) || 0
   socket.emit('grid_update', await getGrid())
+  socket.emit('placement_count', currentCount)
 
   socket.on('apply_color', async ({ x, y, color }) => {
-    // Déterminer l'IP du client (respecte X-Forwarded-For si présent)
     const forwarded =
       socket.handshake.headers && socket.handshake.headers['x-forwarded-for']
     const ip = forwarded
@@ -60,10 +63,8 @@ io.on('connection', async (socket) => {
 
     const cooldownKey = `cooldown:${ip}`
 
-    // Tenter d'ajouter la clé de cooldown (NX = uniquement si elle n'existe pas, EX = expiration en secondes)
     const setResult = await redis.set(cooldownKey, '1', { NX: true, EX: 10 })
     if (setResult === null) {
-      // Il y a encore un cooldown en cours
       const ttl = await redis.ttl(cooldownKey)
       socket.emit('cooldown', { seconds: ttl })
       return
@@ -71,7 +72,8 @@ io.on('connection', async (socket) => {
 
     const newGrid = await updateGrid(x, y, color)
     io.emit('grid_update', newGrid)
-    // Envoyer le cooldown au client qui a placé la couleur (utilise TTL pour précision)
+    const newCount = await redis.incr('placement_count')
+    io.emit('placement_count', Number(newCount))
     const ttl = await redis.ttl(cooldownKey)
     socket.emit('cooldown', { seconds: ttl })
   })
