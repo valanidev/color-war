@@ -7,6 +7,7 @@ import io, { Socket } from 'socket.io-client'
 export default function Home() {
   const [cellColors, setCellColors] = useState<string[][]>([])
   const [connected, setConnected] = useState<boolean>(false)
+  const [placementCount, setPlacementCount] = useState<number>(0)
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
@@ -23,6 +24,11 @@ export default function Home() {
       console.log('Socket.IO disconnected')
     })
     socket.on('grid_update', (grid: string[][]) => setCellColors(grid))
+    socket.on('placement_count', (count: number | string) =>
+      setPlacementCount(
+        typeof count === 'number' ? count : parseInt(String(count)) || 0,
+      ),
+    )
     socket.on('cooldown', ({ seconds }) => {
       const s = typeof seconds === 'number' && seconds > 0 ? seconds : 10
       setCooldownSeconds(s)
@@ -52,29 +58,36 @@ export default function Home() {
   const applyColor = (x: number, y: number, color: string) => {
     if (socketRef.current) {
       socketRef.current.emit('apply_color', { x, y, color })
-      setCooldownSeconds(10)
+      setCooldownSeconds(5)
     }
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-neutral-100">
-      {connected ? (
-        <p className="text-2xl text-green-500">Connected</p>
-      ) : (
-        <p className="text-2xl text-red-500">Disconnected</p>
-      )}
+    <main className="flex h-dvh items-center justify-center gap-4 bg-neutral-800 p-4">
+      <div className="h-full flex-1 bg-white/20 p-4">
+        <h1
+          className={`text-2xl font-semibold ${connected ? 'text-green-500' : 'text-red-500'}`}
+        >
+          {connected ? 'Connected' : 'Disconnected'}
+        </h1>
 
-      {cooldownSeconds != null && cooldownSeconds > 0 && (
-        <p className="mt-2 text-lg text-orange-600">
-          Attendez {cooldownSeconds}s avant de poser une autre couleur.
+        <p className="mt-2 text-lg">
+          Couleurs posées depuis le début : {placementCount}
         </p>
-      )}
+
+        {cooldownSeconds != null && cooldownSeconds > 0 && (
+          <p className="mt-2 text-lg">
+            Wait {cooldownSeconds}s before placing another color.
+          </p>
+        )}
+      </div>
 
       <Canvas
         cellColors={cellColors}
         onApplyColor={applyColor}
         cooldownSeconds={cooldownSeconds}
         onError={(msg: string) => console.log(msg)}
+        className="bg-neutral-700"
       />
     </main>
   )

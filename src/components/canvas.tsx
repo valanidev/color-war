@@ -9,6 +9,7 @@ type CanvasProps = {
   onApplyColor: (x: number, y: number, color: string) => void
   cooldownSeconds: number | null
   onError: (msg: string) => void
+  className?: string
 }
 
 export default function ColorWarCanvas({
@@ -16,6 +17,7 @@ export default function ColorWarCanvas({
   onApplyColor,
   cooldownSeconds,
   onError,
+  className,
 }: CanvasProps) {
   const COLOR_PALETTE = [
     '#ffffff',
@@ -37,6 +39,7 @@ export default function ColorWarCanvas({
   ]
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [canvasSize, setCanvasSize] = useState(0)
 
   const [zoom, setZoom] = useState(1)
   const [camera, setCamera] = useState({ x: 0, y: 0 })
@@ -49,10 +52,23 @@ export default function ColorWarCanvas({
     cellY: number
   } | null>(null)
 
-  const CANVAS_SIZE = 512
+  useEffect(() => {
+    const updateSize = () => {
+      const rootFontSize = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      )
+      setCanvasSize(window.innerHeight - 2 * rootFontSize)
+    }
+
+    updateSize()
+    window.addEventListener('resize', updateSize)
+
+    return () => window.removeEventListener('resize', updateSize)
+  }, [])
+
   const rows = cellColors.length
   const cols = cellColors[0]?.length || 0
-  const BASE_CELL_SIZE = cols ? CANVAS_SIZE / cols : 10
+  const BASE_CELL_SIZE = cols ? canvasSize / cols : 10
   const cellSize = BASE_CELL_SIZE * zoom
 
   const MIN_ZOOM = 1
@@ -65,15 +81,15 @@ export default function ColorWarCanvas({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+    ctx.clearRect(0, 0, canvasSize, canvasSize)
     const startX = Math.floor(camera.x)
     const startY = Math.floor(camera.y)
     const visibleX = Math.min(
-      Math.ceil(CANVAS_SIZE / cellSize) + 1,
+      Math.ceil(canvasSize / cellSize) + 1,
       cols - startX,
     )
     const visibleY = Math.min(
-      Math.ceil(CANVAS_SIZE / cellSize) + 1,
+      Math.ceil(canvasSize / cellSize) + 1,
       rows - startY,
     )
 
@@ -165,8 +181,8 @@ export default function ColorWarCanvas({
       let newCameraX = worldX - mx / newCellSize
       let newCameraY = worldY - my / newCellSize
 
-      const visibleCellsX = CANVAS_SIZE / newCellSize
-      const visibleCellsY = CANVAS_SIZE / newCellSize
+      const visibleCellsX = canvasSize / newCellSize
+      const visibleCellsY = canvasSize / newCellSize
 
       const maxX = Math.max(0, cols - visibleCellsX)
       const maxY = Math.max(0, rows - visibleCellsY)
@@ -194,8 +210,8 @@ export default function ColorWarCanvas({
       const nx = prev.x - e.movementX / cellSize
       const ny = prev.y - e.movementY / cellSize
 
-      const maxX = Math.max(0, cols - CANVAS_SIZE / cellSize)
-      const maxY = Math.max(0, rows - CANVAS_SIZE / cellSize)
+      const maxX = Math.max(0, cols - canvasSize / cellSize)
+      const maxY = Math.max(0, rows - canvasSize / cellSize)
 
       return {
         x: Math.max(0, Math.min(maxX, nx)),
@@ -206,11 +222,11 @@ export default function ColorWarCanvas({
   const handleMouseUp = () => (isPanning.current = false)
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center bg-neutral-100">
+    <div className={className}>
       <canvas
         ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
+        width={canvasSize}
+        height={canvasSize}
         className="cursor-crosshair border border-neutral-400 bg-white"
         onContextMenu={(e) => e.preventDefault()}
         onClick={handleClick}
